@@ -160,6 +160,11 @@
     phases: [[162, 'S-IC first stage'], [166, 'S-IC separation'], [550, 'S-II second stage'], [556, 'S-II separation'], [700, 'S-IVB third stage']],
     coastName: 'Earth parking orbit', speedTxt: '≈ 28,000 km/h in parking orbit (≈ 7.8 km/s)', altTxt: 'Parking orbit ≈ 190 km',
     desc: 'Apollo Moon rocket: three stages, about 11.5 minutes to Earth parking orbit before heading to the Moon.' });
+  rocket({ id: 'falcon9', name: 'Falcon 9 Block 5', country: 'USA (SpaceX)', ascentTime: 520, orbitAlt: 210, tSep: 160, vSep: 8300, hSep: 68, sepDur: 4,
+    phases: [[160, 'First stage (9 Merlin 1D)'], [164, 'Stage separation'], [520, 'Second stage (Merlin Vacuum)']],
+    secoName: 'SECO (engine cutoff)', booster: { tLand: 525, apo: 125, drone: 610 },
+    speedTxt: '≈ 27,500 km/h in orbit', altTxt: 'Low Earth orbit ≈ 210 km (shown)',
+    desc: 'The workhorse reusable rocket. The first stage flips, re-enters with an entry burn and lands on a drone ship ≈ 600 km downrange.' });
   rocket({ id: 'falconheavy', name: 'Falcon Heavy', country: 'USA (SpaceX)', ascentTime: 510, orbitAlt: 200, tSep: 185, vSep: 9000, hSep: 75, sepDur: 8,
     phases: [[150, 'Side boosters + centre core'], [155, 'Side-booster separation'], [185, 'Centre core'], [193, 'Stage separation'], [510, 'Second-stage burn']],
     speedTxt: '≈ 27,000–28,000 km/h in orbit', altTxt: 'Low Earth orbit ≈ 200 km (shown)', desc: 'Three Falcon 9-derived cores strapped together; side boosters usually fly back to land.' });
@@ -258,7 +263,7 @@
     agni5: { ops: ['IN'] },
     avangard: { ops: ['RU'] }, kinzhal: { ops: ['RU'] }, zircon: { ops: ['RU'] }, df17: { ops: ['CN'] },
     darkeagle: { ops: ['US'] },
-    saturnv: { ops: ['US'], retired: true }, falconheavy: { ops: ['US'] }, soyuz: { ops: ['RU'] },
+    saturnv: { ops: ['US'], retired: true }, falcon9: { ops: ['US'] }, falconheavy: { ops: ['US'] }, soyuz: { ops: ['RU'] },
     ariane5: { ops: ['FR', 'EU'], retired: true }, ariane6: { ops: ['FR', 'EU'] }, sls: { ops: ['US'] },
     longmarch5: { ops: ['CN'] }, electron: { ops: ['NZ', 'US'] }, starship: { ops: ['US'] },
   };

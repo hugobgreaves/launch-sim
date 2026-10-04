@@ -106,7 +106,7 @@
     .pathPoints('pts').pathPointLat(p => p[0]).pathPointLng(p => p[1]).pathPointAlt(p => p[2])
     .pathColor(d => d.color).pathStroke(d => d.width)
     .pathDashLength(d => d.dash ? 0.01 : 1).pathDashGap(d => d.dash ? 0.008 : 0).pathDashAnimateTime(0)
-    .pathTransitionDuration(0)
+    .pathTransitionDuration(0).pathResolution(1)
     .htmlElementVisibilityModifier((e, vis) => e.classList.toggle('behind', !vis)).htmlElement(d => d.el).htmlLat(d => d.lat).htmlLng(d => d.lng).htmlAltitude(d => d.alt)
     .htmlTransitionDuration(0)
     .ringColor(d => t => `${d.rgb},${(d.a || 1) * (1 - t)})`).ringMaxRadius(d => d.r || 3).ringPropagationSpeed(d => d.sp || 1.5).ringRepeatPeriod(d => d.rep || 1400)
@@ -278,7 +278,9 @@
     const off = 14 * Math.PI / 180;
     const V = M.map((x, i) => x * Math.cos(off) + N[i] * Math.sin(off));
     const ll = S.toLatLng(V);
-    const alt = Math.min(3.8, Math.max(1.4, routeKm / 4000 + 1.3)) * (innerWidth < 820 ? 0.8 : 1);
+    const ge = document.getElementById('globe'), asp = ge.clientWidth / Math.max(1, ge.clientHeight);
+    let alt = Math.min(3.8, Math.max(1.4, routeKm / 4000 + 1.3));
+    if (asp < 1) alt = Math.min(6, (alt + 1) / Math.pow(asp, 0.4) - 1); // portrait phone: the narrow width limits the view, so pull back
     globe.pointOfView({ lat: ll.lat, lng: ll.lng, altitude: alt }, ms);
   }
   const pick = p => ({ lat: p.lat, lng: p.lng });
@@ -391,8 +393,8 @@
       for (let k = 0; k <= last; k += stride) { const q = S0[k], p = gcFn(q.s); pts.push([p.lat, p.lng, visAlt(q.h)]); }
       pts.push([ll.lat, ll.lng, visAlt(st.h)]);
       if (pts.length < 2) pts.unshift(pts[0]);
-      paths.push({ pts, color: hexA(r.color, 0.16), width: 11, dash: false }); // soft glow under the trail
-      paths.push({ pts, color: r.color, width: 3.5, dash: false });
+      paths.push({ pts, color: [hexA(r.color, 0.04), hexA(r.color, 0.22)], width: 11, dash: false }); // soft glow under the trail (brighter towards the vehicle)
+      paths.push({ pts, color: [hexA(r.color, 0.5), r.color], width: 3.5, dash: false });
       if (r.booster) {
         const B = r.booster, b0 = B.samples[0].t;
         paths.push(B.planned);
@@ -403,13 +405,13 @@
           for (let k = 0; k <= lastB; k += 2) { const q = B.samples[k], p = gcFn(q.s); bpts.push([p.lat, p.lng, visAlt(q.h)]); }
           bpts.push([bl.lat, bl.lng, visAlt(bst.h)]);
           if (bpts.length < 2) bpts.unshift(bpts[0]);
-          paths.push({ pts: bpts, color: '#fbbf24', width: 3, dash: false });
+          paths.push({ pts: bpts, color: ['rgba(251,191,36,0.45)', '#fbbf24'], width: 3, dash: false });
           Object.assign(B.marker, { lat: bl.lat, lng: bl.lng, alt: visAlt(bst.h), show: true });
         } else B.marker.show = false;
       }
     });
     const now = performance.now();
-    if (forcePaths || now - lastPathDraw > 70) { globe.pathsData(paths); lastPathDraw = now; }
+    if (forcePaths || now - lastPathDraw > 45) { globe.pathsData(paths); lastPathDraw = now; }
     updateRings();
     const mks = [...state.siteMarkers, ...(state.ringLabels || []), ...(state.baseMarkers || []), ...(state.fx || []), ...state.runs.map(r => r.marker)];
     state.runs.forEach(r => { if (r.stopMk) mks.push(r.stopMk); });
@@ -426,10 +428,11 @@
   const THRUST = /boost|stage|ascent|burn|liftoff|max-q|core|S-I|rocket|scramjet|accelerate|Released/i, NOTHRUST = /separation|orbit|coast|SECO|cutoff/i;
   const hooks = { onArrive() {}, onEnd() {}, onLaunch() {} };
   function updateRings() {
-    const list = [...(state.baseRings || [])];
+    const clean = document.body.classList.contains('focus'); // Focus / clean view: no range or base rings
+    const list = clean ? [] : [...(state.baseRings || [])];
     if (state.launchFxUntil && performance.now() < state.launchFxUntil) list.push(state.launchRing || (state.launchRing = { lat: state.from.lat, lng: state.from.lng, rgb: 'rgba(255,190,90', r: 7, sp: 5, rep: 450 }));
-    state.runs.forEach(r => { if (r.endRing) list.push(r.endRing); });
-    const key = list.map(x => x.lat.toFixed(3) + x.rgb + (x.r || 0)).join('|');
+    if (!clean) state.runs.forEach(r => { if (r.endRing) list.push(r.endRing); });
+    const key = (clean ? 'F' : '') + list.map(x => x.lat.toFixed(3) + x.rgb + (x.r || 0)).join('|');
     if (key !== state.ringKey) { state.ringKey = key; globe.ringsData(list); }
   }
   // ---------- Results summary ----------
@@ -812,5 +815,5 @@
     else if (b.dataset.act === 'replay') { $('results').hidden = true; state.t = 0; draw(true); hooks.onReplay ? hooks.onReplay() : setPlaying(true); }
     else if (b.dataset.act === 'random') { $('results').hidden = true; randomScenario(); }
   };
-  window.__launchSim = { hooks, randomScenario, showResults, focusRoute, routeKm: () => routeKm, gcFn: k => gcFn(k), syncUrl, setPlatform, state, draw, setPlaying, globe, openPicker, closePicker, onPick, setPick, showCountry, setLaunchFromBase, focusLaunch, featureAt, rebuild };
+  window.__launchSim = { hooks, updateRings, randomScenario, showResults, focusRoute, routeKm: () => routeKm, gcFn: k => gcFn(k), syncUrl, setPlatform, state, draw, setPlaying, globe, openPicker, closePicker, onPick, setPick, showCountry, setLaunchFromBase, focusLaunch, featureAt, rebuild };
 })();

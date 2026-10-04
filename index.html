@@ -14,20 +14,20 @@
     <canvas id="spaceCanvas"></canvas>
     <div class="space-inset" id="insetWrap" hidden><div class="inset-title" id="insetTitle"></div><canvas id="spaceInset" width="300" height="220"></canvas></div>
     <div class="space-legend" id="spaceLegend"></div>
-    <div class="space-hint">Scroll to zoom · drag to pan</div>
+    <div class="space-hint"><span class="hint-mouse">Scroll to zoom · drag to pan</span><span class="hint-touch">Pinch to zoom · drag to pan</span></div>
   </div>
 
   <header class="topbar">
     <div class="brand"><span class="logo">🚀</span><div><h1>Launch Speed Simulator</h1><p id="tagline">Compare how fast rockets, missiles and aircraft cross the globe</p></div></div>
-    <nav class="mode-tabs" id="modeTabs"><button data-mode="globe" class="on">🌍 Globe</button><button data-mode="space">🪐 Space missions</button></nav>
-    <div class="top-tools"><button id="camBtn" class="tool-btn cam" title="Close-up 3D Starship view (C)">🛰 Starship cam</button><button id="soundBtn" class="tool-btn" title="Sound effects (off by default)" aria-pressed="false">🔇 Sound</button><button id="helpBtn" class="tool-btn" title="Quick guide">❔ Guide</button></div>
+    <nav class="mode-tabs" id="modeTabs"><button data-mode="globe" class="on">🌍<span class="tlab"> Globe</span></button><button data-mode="space">🪐<span class="tlab"> Space missions</span></button></nav>
+    <div class="top-tools"><button id="mcBtn" class="tool-btn" title="Live telemetry graphs, event timeline and flight director (M)">📈<span class="tlab"> Mission control</span></button><button id="camBtn" class="tool-btn cam" title="Close-up 3D rocket cam: Starship, Falcon 9, Saturn V, Electron (C)">🛰<span class="tlab"> 3D rocket cam</span></button><button id="soundBtn" class="tool-btn" title="Sound effects (off by default)" aria-pressed="false">🔇<span class="tlab"> Sound</span></button><button id="focusBtn" class="tool-btn" title="Focus: clean view with just the globe, flight paths and vehicles (H)" aria-pressed="false">⛶<span class="tlab"> Focus</span></button><button id="helpBtn" class="tool-btn" title="Quick guide">❔<span class="tlab"> Guide</span></button></div>
   </header>
 
   <section id="readouts" class="readouts" aria-live="polite"></section>
   <section id="spaceReadouts" class="readouts space-ro" hidden></section>
 
   <aside id="panel" class="panel">
-    <button id="panelToggle" class="panel-toggle" aria-label="Toggle controls"><span></span></button>
+    <button id="panelToggle" class="panel-toggle" aria-label="Show or hide the controls" aria-expanded="false"><span></span><b class="sheet-sum" id="sheetSum">Route, vehicles &amp; settings</b></button>
     <div class="panel-body">
       <div class="card globe-only">
         <div class="card-title">Route <button id="randomBtn" class="title-btn" type="button" title="Pick a random launch site, vehicles and destination">🎲 Random scenario</button></div>
@@ -94,7 +94,10 @@
           <button id="camLaunch" class="btn small-btn" title="Shortcut: C">🎯 Launch close-up</button>
         </div>
         <label class="check"><input type="checkbox" id="follow" /> Camera follows vehicle A</label>
-        <div class="muted small shortcuts">Keys: <kbd>Space</kbd> play/pause · <kbd>R</kbd> reset · <kbd>1</kbd>–<kbd>4</kbd> speed · <kbd>C</kbd> close-up · <kbd>V</kbd> route view · <kbd>F</kbd> follow</div>
+        <label class="check"><input type="checkbox" id="cloudsChk" checked /> ☁ Cloud layer (day/night shaded)</label>
+        <label class="field"><span>Graphics quality (globe + 3D cam)</span>
+          <select id="qualitySel"><option value="low">Low – fastest</option><option value="medium">Medium</option><option value="high" selected>High</option></select></label>
+        <div class="muted small shortcuts">Keys: <kbd>Space</kbd> play/pause · <kbd>R</kbd> reset · <kbd>1</kbd>–<kbd>4</kbd> speed · <kbd>C</kbd> close-up · <kbd>V</kbd> route view · <kbd>F</kbd> follow · <kbd>H</kbd> focus view · <kbd>M</kbd> mission control</div>
       </div>
 
       <div class="card space-only" hidden>
@@ -149,6 +152,8 @@
   </div>
   <div id="vpopBackdrop" class="vpop-backdrop" hidden></div>
 
+  <div id="focusHud" class="focus-hud" hidden><span class="fh-dot" id="fhDot"></span><span id="fhSpeed">0 km/h</span><span class="fh-sep">·</span><span id="fhTime">T+0:00</span><button id="fhPlay" class="fh-btn" title="Play / pause (Space)">▶</button><button id="fhExit" class="fh-btn fh-exit" title="Exit focus (H or Esc)">✕<span class="fh-lab"> Exit focus</span></button></div>
+  <div id="mSpaceBar" class="m-spacebar"><button id="mSpPlay" class="btn primary">▶ Play</button><button id="mSpFit" class="lb-small" title="Fit mission">🔭</button></div>
   <div id="toast" class="toast" hidden></div>
   <div id="launchBar" class="launch-bar">
     <button id="launchBtn" class="launch-btn">🚀 LAUNCH</button>
@@ -168,6 +173,8 @@
   <script src="bases.js"></script>
   <script src="app.js"></script>
   <script src="polish.js"></script>
+  <script src="mission-control.js"></script>
+  <script src="focus-mobile.js"></script>
   <!-- Space mode (astronomy-engine, space-core.js, space.js) is lazy-loaded by polish.js on first use -->
 </body>
 </html>

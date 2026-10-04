@@ -305,27 +305,46 @@
     return res;
   }
 
-  // Returning first stage (illustrative): boostback towards the launch site, coast/descent, landing.
+  // Returning first stage (illustrative): boostback (or a drone-ship arc), coast to apogee, then a physically-shaped descent
+  // worked out backwards from touchdown: free fall from apogee, an entry burn (70 → 40 km), a drag-limited fall and a
+  // ~20 s landing burn from ~2.5 km that brings it to 0 m/s exactly at touchdown.
   function simulateBooster(b, tSep, sSep, hSep, vSep) {
-    const tLand = b.tLand, apo = b.apo, N = 300, pts = [];
+    const tLand = b.tLand, apo = b.apo, N = 300, pts = [], Tt = tLand - tSep, g = 9.81, A = apo * 1000;
+    const vFree = h => Math.max(25, Math.sqrt(2 * g * Math.max(0, A - h)));
+    const vSink = h => { // descent speed (m/s) as a function of altitude (m)
+      if (h < 2500) return Math.max(0.5, Math.sqrt(2 * 12.5 * h));         // landing burn ~1.3 g net
+      const vTerm = 250 + (Math.min(h, 40000) - 2500) / 37500 * 400;         // thickening air slows it down
+      if (h < 40000) return vTerm;
+      if (h < 70000) { const k = (h - 40000) / 30000; return 650 + (vFree(Math.min(A, 70000)) - 650) * k * k; } // entry burn
+      return vFree(h);
+    };
+    const fall = [{ t: 0, h: A }]; // integrate the fall from apogee down to the ground
+    for (let h = A, t = 0; h > 0;) { const dh = Math.min(h, h < 3000 ? 10 : 200); t += dh / ((vSink(h) + vSink(h - dh)) / 2); h -= dh; fall.push({ t, h }); }
+    const Tf = fall[fall.length - 1].t, tA = Math.max(Tt * 0.15, Tt - Tf), kF = (Tt - tA) / Tf; // apogee time (stretch the fall slightly if needed)
+    const hAt = tau => {
+      if (tau <= tA) return hSep * 1000 + (A - hSep * 1000) * Math.sin((Math.PI / 2) * Math.min(1, tau / tA));
+      const tf = (tau - tA) / kF; let lo = 0, hi = fall.length - 1;
+      while (hi - lo > 1) { const m = (lo + hi) >> 1; if (fall[m].t < tf) lo = m; else hi = m; }
+      const a = fall[lo], c = fall[hi], f = (tf - a.t) / ((c.t - a.t) || 1); return a.h + (c.h - a.h) * Math.min(1, Math.max(0, f));
+    };
     for (let i = 0; i <= N; i++) {
-      const u = i / N, t = tSep + u * (tLand - tSep);
-      const s = sSep * (1 + 0.18 * Math.sin(Math.PI * Math.min(1, u / 0.4))) * (1 - smooth(Math.min(1, u * 1.05)));
-      const h = u < 0.3 ? hSep + (apo - hSep) * Math.sin((Math.PI / 2) * (u / 0.3)) : apo * (1 - ((u - 0.3) / 0.7) ** 2);
-      pts.push({ t, s: Math.max(0, s), h: Math.max(0, h) });
+      const u = i / N, t = tSep + u * Tt;
+      const s = b.drone ? sSep + (b.drone - sSep) * (1 - (1 - Math.min(1, u * 1.04)) ** 1.6) // ballistic arc out to a drone ship downrange
+        : sSep * (1 + 0.18 * Math.sin(Math.PI * Math.min(1, u / 0.4))) * (1 - smooth(Math.min(1, u * 1.05)));
+      pts.push({ t, s: Math.max(0, s), h: Math.max(0, hAt(u * Tt) / 1000) });
     }
     for (let i = 0; i <= N; i++) {
       const a = pts[Math.max(0, i - 1)], c = pts[Math.min(N, i + 1)];
       const dts = c.t - a.t || 1;
       let v = Math.hypot((c.s - a.s) / dts, (c.h - a.h) / dts) * 3600;
-      const u = i / N;
+      const u = i / N, tau = u * Tt, hm = pts[i].h * 1000, down = tau > tA;
       if (u < 0.05) v = vSep * (1 - u / 0.05) + v * (u / 0.05); // blend from separation speed
-      if (u > 0.92) v *= Math.max(0.02, (1 - u) / 0.08);       // landing burn slows it to ~0
       pts[i].v = v;
-      pts[i].phase = u < 0.14 ? 'Boostback burn' : (u < 0.88 ? 'Coast & descent' : 'Landing burn');
+      pts[i].phase = b.drone ? (u < 0.12 ? 'Flip & coast' : !down || hm > 70000 ? 'Coast (apogee)' : hm > 40000 ? 'Entry burn' : hm > 2500 ? 'Coast & descent' : 'Landing burn')
+        : (u < 0.14 ? 'Boostback burn' : (!down || hm > 2500 ? 'Coast & descent' : 'Landing burn'));
     }
-    pts[N].v = 0; pts[N].phase = 'Back at launch site';
-    return { samples: pts, arrival: tLand, end: tLand, length: sSep };
+    pts[N].v = 0; pts[N].h = 0; pts[N].phase = b.drone ? 'Landed on the drone ship' : 'Back at launch site';
+    return { samples: pts, arrival: tLand, end: tLand, length: b.drone ? b.drone : sSep, drone: !!b.drone };
   }
   function interpTime(samples, s) {
     for (let i = 1; i < samples.length; i++) if (samples[i].s >= s) {

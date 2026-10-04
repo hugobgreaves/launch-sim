@@ -38,3 +38,26 @@ Toggle **🪐 Space missions** in the top bar (or open `?mode=space&target=mars|
   - **Climb and staging:** the sky darkens to space over the curved Earth. Hot staging, then the booster flips back, boosts back and is caught by the chopsticks.
   - **Space missions:** the ship's vacuum Raptors glow, and you see orbital refuelling with a tanker, Mars entry plasma and landings on Mars and the Moon.
   - **Loading and performance:** three.js is bundled in `vendor/three-bundle.min.js` and only loads when the cam is opened. Resolution adapts to keep the frame rate up.
+
+## v7 upgrade ("v4" release)
+- **3D rocket cam** (was the Starship cam; `starship-cam.js` + `cam-vehicles.js`, lazy-loaded): pick **Starship, Falcon 9, Saturn V or Electron** in the cam panel (it sets vehicle A and a matching launch site). Civilian space rockets only.
+  - Falcon 9: 9 Merlins, grid fins, deployable landing legs, MVac with glowing nozzle, fairing separation, LC-39A pad with transporter-erector, and the **booster landing on a drone ship** (entry burn, landing burn, legs, animated ocean).
+  - Saturn V: 5 F-1s with centre-engine cutoff, S-II (5 J-2) and S-IVB stages, LES jettison, mobile launcher + red umbilical tower with swing arms.
+  - Electron: 9 Rutherfords, carbon-black stages, Mahia LC-1 strongback.
+  - Starship: frost bands on the tanks that fade after liftoff, soot streaks, softer weld seams, landing legs for the Moon and Mars.
+- **Plumes and effects:** fuel-specific exhaust colours (methalox, kerolox, hydrolox), sea-level → vacuum colour change and plume expansion, Mach diamonds, screen-space **heat haze** around the exhaust, HTML **lens flare** with an occlusion check, camera shake at liftoff, and sun-lit volumetric-looking steam puffs.
+- **Real sun:** lighting matches the real sun position over the launch pad right now (low-precision solar ephemeris). Presets: Morning, Midday, Sunset and Night launch.
+- **Moon and Mars landings:** cratered displaced terrain with rocks, plus engine dust kicked up below ~170 m (a fast grey sheet on the Moon, billowing red dust on Mars). The legs swing down and the ship lands standing on them.
+- **Mission control** (📈 button or `M`): live altitude, speed and acceleration (g) graphs for runs A and B, a flight-director panel with status lights and the next event, and a clickable event timeline (space mode: distance and speed graphs).
+- **Globe:** optional day/night-shaded cloud layer, smoother path rendering.
+- **Quality setting:** Low, Medium or High, shared by the globe and the cam. It controls pixel ratio, bloom, haze, flare and particle budgets, on top of adaptive resolution.
+- **Booster descent:** booster landings follow a physically shaped profile: free fall from apogee, an entry burn (≈70→40 km), a drag-limited fall, and a ~20 s landing burn down to 0 m/s.
+- **Focus / clean view** (⛶ button or `H`): hides every panel, readout and label, leaving just the globe (or the 3D cam / space view) with the flight paths and moving vehicles. A tiny HUD shows speed, mission time and play/pause. Leave with `H`, `Esc` or ✕.
+- **Phones** (`focus-mobile.js` plus the phone CSS block):
+  - The globe fills the screen and is framed for portrait screens. Readouts become compact chips; tap one for full detail.
+  - The controls live in a draggable bottom sheet (peek, half, full) that the globe resizes around, so it never covers the flight.
+  - The launch bar rides above the sheet. Buttons are 40–48 px icon touch targets.
+  - Pinch-zoom and drag work on the globe, the space view (new two-finger pinch) and the 3D cam.
+  - The cam has a collapsible ⚙ Controls sheet that shifts the picture up so the rocket stays in view.
+  - Phones default to Medium graphics quality.
+  - Tested at 390×844 and 360×800.

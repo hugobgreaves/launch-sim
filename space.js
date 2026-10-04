@@ -416,14 +416,38 @@
 
   // ================= interaction =================
   let drag = null;
+  function zoomAt(mx, my, scale) { // keep the world point under (mx, my) fixed while zooming
+    const wx = S.view.cx + (mx - W / 2) / S.view.scale, wy = S.view.cy - (my - Hh / 2) / S.view.scale;
+    S.view.scale = scale; if (!S.follow) { S.view.cx = wx - (mx - W / 2) / S.view.scale; S.view.cy = wy + (my - Hh / 2) / S.view.scale; }
+  }
   cv.addEventListener('wheel', e => {
-    e.preventDefault(); const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-    const k = Math.exp(-e.deltaY * 0.0015), wx = S.view.cx + (mx - W / 2) / S.view.scale, wy = S.view.cy - (my - Hh / 2) / S.view.scale;
-    S.view.scale *= k; if (!S.follow) { S.view.cx = wx - (mx - W / 2) / S.view.scale; S.view.cy = wy + (my - Hh / 2) / S.view.scale; }
+    e.preventDefault(); const r = cv.getBoundingClientRect();
+    zoomAt(e.clientX - r.left, e.clientY - r.top, S.view.scale * Math.exp(-e.deltaY * 0.0015));
   }, { passive: false });
-  cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, cx: S.view.cx, cy: S.view.cy }; cv.classList.add('drag'); cv.setPointerCapture(e.pointerId); });
-  cv.addEventListener('pointermove', e => { if (!drag) return; S.follow = false; S.view.cx = drag.cx - (e.clientX - drag.x) / S.view.scale; S.view.cy = drag.cy + (e.clientY - drag.y) / S.view.scale; });
-  cv.addEventListener('pointerup', () => { drag = null; cv.classList.remove('drag'); });
+  // one pointer drags, two pointers (touch) pinch-zoom around their midpoint and pan
+  const ptrs = new Map(); let pinch = null;
+  const two = () => { const [a, b] = [...ptrs.values()]; return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
+  const startDrag = p => { drag = { x: p.x, y: p.y, cx: S.view.cx, cy: S.view.cy }; };
+  cv.addEventListener('pointerdown', e => {
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); cv.classList.add('drag'); try { cv.setPointerCapture(e.pointerId); } catch (er) {}
+    if (ptrs.size >= 2) { const t = two(); pinch = { d: t.d, scale: S.view.scale, x: t.x, y: t.y }; drag = null; } else startDrag(ptrs.get(e.pointerId));
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && ptrs.size >= 2) {
+      const t = two(), r = cv.getBoundingClientRect();
+      if (!S.follow) { S.view.cx -= (t.x - pinch.x) / S.view.scale; S.view.cy += (t.y - pinch.y) / S.view.scale; }
+      zoomAt(t.x - r.left, t.y - r.top, pinch.scale * t.d / pinch.d); pinch.scale = S.view.scale; pinch.d = t.d; pinch.x = t.x; pinch.y = t.y;
+      return;
+    }
+    if (!drag) return; S.follow = false; S.view.cx = drag.cx - (e.clientX - drag.x) / S.view.scale; S.view.cy = drag.cy + (e.clientY - drag.y) / S.view.scale;
+  });
+  const up = e => {
+    ptrs.delete(e.pointerId);
+    if (ptrs.size < 2) pinch = null;
+    if (ptrs.size === 1) startDrag([...ptrs.values()][0]); else if (!ptrs.size) { drag = null; cv.classList.remove('drag'); }
+  };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   window.addEventListener('resize', () => { resize(); });
 
   $('spTarget').onclick = e => { const b = e.target.closest('button'); if (b) setTarget(b.dataset.target); };

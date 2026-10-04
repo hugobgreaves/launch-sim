@@ -53,6 +53,48 @@
   }
   setupDayNight();
 
+  // ================= Cloud layer (v7): slowly drifting, darkened on the night side =================
+  function setupClouds() {
+    const gm = globe.globeMaterial(); let gmesh = null;
+    globe.scene().traverse(o => { if (o.isMesh && o.material === gm) gmesh = o; });
+    if (!gmesh) return setTimeout(setupClouds, 300);
+    const img = new Image();
+    img.onload = () => {
+      const Tex = (gm.map || {}).constructor; if (!Tex || !gm.map) return setTimeout(() => img.onload(), 300);
+      const tex = new Tex(img); tex.needsUpdate = true;
+      const R = globe.getGlobeRadius ? globe.getGlobeRadius() : 100;
+      const geo = new gmesh.geometry.constructor(R * 1.007, 96, 64);
+      const mat = new gm.constructor({ color: 0xffffff, alphaMap: tex, transparent: true, depthWrite: false, opacity: 0.85, shininess: 0 });
+      mat.onBeforeCompile = sh => {
+        sh.uniforms.sunDir = uni.sunDir;
+        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWN2;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n  vWN2 = normalize(mat3(modelMatrix) * objectNormal);');
+        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 sunDir;\nvarying vec3 vWN2;')
+          .replace('#include <opaque_fragment>', 'float dmc = smoothstep(-0.2, 0.15, dot(normalize(vWN2), sunDir));\n  outgoingLight = mix(vec3(0.03, 0.04, 0.06), outgoingLight, dmc);\n  diffuseColor.a *= mix(0.25, 1.0, dmc);\n#include <opaque_fragment>');
+      };
+      const clouds = new gmesh.constructor(geo, mat); clouds.renderOrder = 2; clouds.name = 'clouds';
+      gmesh.parent.add(clouds); G.clouds = clouds;
+      const on = LS.get('ls_clouds') !== '0'; $('cloudsChk').checked = on; clouds.visible = on;
+      $('cloudsChk').onchange = e => { clouds.visible = e.target.checked; LS.set('ls_clouds', e.target.checked ? '1' : '0'); };
+      (function spin() { clouds.rotation.y += 0.00004; requestAnimationFrame(spin); })();
+    };
+    img.src = 'vendor/clouds-alpha.jpg';
+  }
+  setTimeout(setupClouds, 800);
+
+  // ================= Graphics quality (shared with the 3D cam) =================
+  (function quality() {
+    const sel = $('qualitySel'); if (!sel) return;
+    const apply = k => {
+      try { G.globe.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, k === 'low' ? 1 : k === 'medium' ? 1.5 : 2)); } catch (e) {}
+      if (G.clouds) G.clouds.visible = k !== 'low' && $('cloudsChk').checked;
+      $('cloudsChk').disabled = k === 'low';
+    };
+    const phone = window.matchMedia && matchMedia('(pointer: coarse)').matches && Math.min(innerWidth, innerHeight) < 600;
+    const k0 = LS.get('ls_quality') || (phone ? 'medium' : 'high'); // phones default to Medium for smooth touch interaction sel.value = k0; apply(k0); setTimeout(() => apply(sel.value), 2500); // re-apply once the cloud layer exists
+    sel.onchange = () => { LS.set('ls_quality', sel.value); apply(sel.value); window.dispatchEvent(new CustomEvent('ls-quality', { detail: sel.value })); };
+    window.addEventListener('ls-quality', e => { if (e.detail && sel.value !== e.detail) { sel.value = e.detail; apply(e.detail); } });
+  })();
+
   // ================= Starfield =================
   (function stars() {
     const mk = (n, bright) => {
@@ -97,7 +139,7 @@
     click: () => tone(1500, 0.04, 'square', 0.04)
   };
   G.sfx = SFX;
-  function renderSound() { $('soundBtn').textContent = soundOn ? '🔊 Sound' : '🔇 Sound'; $('soundBtn').setAttribute('aria-pressed', soundOn); $('soundBtn').classList.toggle('on', soundOn); }
+  function renderSound() { $('soundBtn').innerHTML = soundOn ? '🔊<span class="tlab"> Sound</span>' : '🔇<span class="tlab"> Sound</span>'; $('soundBtn').setAttribute('aria-pressed', soundOn); $('soundBtn').classList.toggle('on', soundOn); }
   $('soundBtn').onclick = () => { soundOn = !soundOn; LS.set('ls_sound', soundOn ? '1' : '0'); renderSound(); if (soundOn) SFX.arrive(); };
   renderSound();
 
@@ -178,8 +220,8 @@
   function openCam() {
     const b = $('camBtn');
     if (window.__starshipCam) { window.__starshipCam.isOpen() ? window.__starshipCam.close() : window.__starshipCam.open(); return Promise.resolve(); }
-    if (!camP) { b.classList.add('loading-tab'); b.textContent = '⏳ Loading 3D…'; try { delete window.__THREE__; } catch (e) {} // globe.gl bundles its own three.js; the 3D cam loads a separate copy on purpose
-      camP = import('./starship-cam.js').finally(() => { b.classList.remove('loading-tab'); b.textContent = '🛰 Starship cam'; }); }
+    if (!camP) { b.classList.add('loading-tab'); b.innerHTML = '⏳<span class="tlab"> Loading 3D…</span>'; try { delete window.__THREE__; } catch (e) {} // globe.gl bundles its own three.js; the 3D cam loads a separate copy on purpose
+      camP = import('./starship-cam.js').finally(() => { b.classList.remove('loading-tab'); b.innerHTML = '🛰<span class="tlab"> 3D rocket cam</span>'; }); }
     return camP.then(m => m.open()).catch(e => { console.error(e); camP = null; });
   }
   G.openCam = openCam;
@@ -235,17 +277,24 @@
     { sel: '#platSeg', title: '🚢 Submarine launches', body: 'Switch to <b>Submarine</b>, choose the navy, then tap anywhere at sea. Only submarine-launched missiles are offered.' },
     { sel: '#pickSeg [data-pick="country"]', title: '🎖 Countries &amp; bases', body: 'Choose <b>Country</b>, then tap a country to highlight it and show its major military bases. Click a base to launch from it.' },
     { sel: '#modeTabs', title: '🪐 Space missions', body: 'Fly Starship to the Moon or Mars on real planetary positions, with computed launch windows and orbital-refuelling estimates.' },
-    { sel: '#camBtn', title: '🛰 Starship cam', body: 'Zoom right in on a detailed 3D Starship: the pad at Starbase, liftoff, Mach diamonds, hot staging, the booster flipping back and – in Space missions – Mars entry. Drag to orbit, scroll to zoom, or press <kbd>C</kbd>.' },
+    { sel: '#camBtn', title: '🛰 3D rocket cam', body: 'Zoom right in on detailed 3D rockets – Starship, Falcon 9 (booster landing on a drone ship), Saturn V and Electron – lit by the real sun over the pad: liftoff, Mach diamonds, staging and – in Space missions – Moon and Mars landings. Drag to orbit, scroll to zoom, or press <kbd>C</kbd>.' },
+    { sel: '#focusBtn', title: '⛶ Focus view', body: 'Hide every panel and label to watch just the globe (or the 3D cam / space view) with the flight paths and moving vehicles, plus a tiny speed and time readout. Press <kbd>H</kbd> or <kbd>Esc</kbd> (or tap ✕) to come back.' },
     { sel: '#launchBar', title: '🚀 Launch!', body: 'Press <b>LAUNCH</b> (or <kbd>L</kbd>) for a skippable countdown and a cinematic flight. Sound is off by default – toggle it in the top bar. Reopen this guide with <b>❔ Guide</b>.' }
   ];
   let step = 0;
   function showGuide(i = 0) {
     if (document.body.classList.contains('space-mode')) return;
     step = i; const s = STEPS[step], g = $('guide'); g.hidden = false;
-    const tgt = s.sel && document.querySelector(s.sel), r = tgt && tgt.getBoundingClientRect();
+    const tgt = s.sel && document.querySelector(s.sel), SH = window.__sheet, phone = SH && SH.phone();
+    if (phone && tgt && tgt.closest('#panel')) { // phone: open the bottom sheet so the highlighted control is visible
+      if (SH.state() === 'peek') { SH.set('half'); let done = false; const pn = $('panel'), again = e => { if (done || (e && (e.target !== pn || e.propertyName !== 'height'))) return; done = true; pn.removeEventListener('transitionend', again); if (!g.hidden && step === i) showGuide(i); }; pn.addEventListener('transitionend', again); setTimeout(again, 1200); }
+      tgt.scrollIntoView({ block: 'nearest' });
+    }
+    const r = tgt && tgt.getBoundingClientRect();
     const spot = r ? `<div class="g-spot" style="left:${r.left - 6}px;top:${r.top - 6}px;width:${r.width + 12}px;height:${r.height + 12}px"></div>` : '<div class="g-dim"></div>';
     let cx = innerWidth / 2 - 170, cy = innerHeight / 2 - 110;
-    if (r) { cx = r.left > innerWidth / 2 ? r.left - 360 : r.right + 18; cy = Math.min(innerHeight - 240, Math.max(16, r.top)); if (r.top > innerHeight - 160) { cx = Math.max(16, r.left + r.width / 2 - 170); cy = r.top - 230; } }
+    if (r) { cx = r.left > innerWidth / 2 ? r.left - 360 : r.right + 18; cy = Math.min(innerHeight - 240, Math.max(16, r.top)); if (r.top > innerHeight - 160) { cx = Math.max(16, r.left + r.width / 2 - 170); cy = r.top - 230; }
+      if (phone) { cx = (innerWidth - 340) / 2; cy = r.top > innerHeight / 2 ? Math.max(12, r.top - 250) : Math.min(innerHeight - 240, r.bottom + 12); } }
     g.innerHTML = `${spot}<div class="g-card" style="left:${Math.max(12, Math.min(innerWidth - 352, cx))}px;top:${cy}px">
       <div class="g-step">${step + 1} / ${STEPS.length}</div><div class="g-title">${s.title}</div><div class="g-body">${s.body}</div>
       <div class="g-actions"><button class="btn small-btn" data-g="skip">Skip tour</button><span></span>${step ? '<button class="btn small-btn" data-g="back">Back</button>' : ''}<button class="btn primary small-btn" data-g="next">${step === STEPS.length - 1 ? 'Done' : 'Next'}</button></div></div>`;
