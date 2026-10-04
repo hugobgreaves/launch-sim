@@ -94,10 +94,10 @@
   // ---------- Globe ----------
   const el = $('globe');
   const globe = new Globe(el, { animateIn: false })
-    .globeImageUrl('vendor/earth-dark.jpg')
+    .globeImageUrl('vendor/earth-blue-marble.jpg')
     .bumpImageUrl('vendor/earth-topology.png')
     .backgroundColor('rgba(0,0,0,0)')
-    .showAtmosphere(true).atmosphereColor('#3b82f6').atmosphereAltitude(0.18)
+    .showAtmosphere(true).atmosphereColor('#5ea8ff').atmosphereAltitude(0.22)
     .polygonCapColor(() => 'rgba(56,189,248,0.035)')
     .polygonSideColor(() => 'rgba(0,0,0,0)')
     .polygonStrokeColor(() => 'rgba(148,163,184,0.55)')
@@ -109,7 +109,7 @@
     .pathTransitionDuration(0)
     .htmlElementVisibilityModifier((e, vis) => e.classList.toggle('behind', !vis)).htmlElement(d => d.el).htmlLat(d => d.lat).htmlLng(d => d.lng).htmlAltitude(d => d.alt)
     .htmlTransitionDuration(0)
-    .ringColor(d => t => `${d.rgb},${1 - t})`).ringMaxRadius(3).ringPropagationSpeed(1.5).ringRepeatPeriod(1400)
+    .ringColor(d => t => `${d.rgb},${(d.a || 1) * (1 - t)})`).ringMaxRadius(d => d.r || 3).ringPropagationSpeed(d => d.sp || 1.5).ringRepeatPeriod(d => d.rep || 1400)
     .onGlobeClick(({ lat, lng }) => onPick(lat, lng))
     .onPolygonClick((poly, ev, coords) => coords && onPick(coords.lat, coords.lng));
   globe.controls().autoRotate = false;
@@ -154,7 +154,8 @@
   }
   const launchCC = () => state.from.cc || null;
   const launchCountryName = () => state.from.countryName || ccName(state.from.cc);
-  setTimeout(() => $('loading').classList.add('hide'), 300);
+  let loaded = false; const hideLoading = () => { if (!loaded) { loaded = true; $('loading').classList.add('hide'); } };
+  if (globe.onGlobeReady) globe.onGlobeReady(() => setTimeout(hideLoading, 250)); setTimeout(hideLoading, 6000);
 
   const visAlt = h => Math.max(h * state.exag / S.R, 0.0018);
 
@@ -218,13 +219,14 @@
     });
     // Range rings (ground circle of max range) for vehicles with a finite range
     state.rings = []; state.ringLabels = [];
+    const routeBrg = bearing(state.from, gcFn(Math.min(10, routeKm / 2)));
     state.runs.forEach(r => {
       const max = r.preset.maxRange;
       if (!isFinite(max) || max >= 19900) return;
       const pts = [];
       for (let k = 0; k <= 180; k++) { const ll = destPoint(state.from, k * 2, max / S.R); pts.push([ll.lat, ll.lng, 0.0025]); }
       state.rings.push({ pts, color: hexA(r.color, 0.85), width: 1.6, dash: true });
-      const lab = destPoint(state.from, 180 + 25 * (r.label === 'A' ? 1 : -1), max / S.R);
+      const lab = destPoint(state.from, (routeBrg + 180 + 30 * (r.label === 'A' ? 1 : -1) + 360) % 360, max / S.R); // opposite side of the route, away from stop markers
       state.ringLabels.push({ el: markerEl(r.color, `${r.label} range ≈ ${fmtInt(max)} km`, 'ringlab'), lat: lab.lat, lng: lab.lng, alt: 0.003 });
     });
     state.maxEnd = Math.max(...state.runs.map(r => r.end));
@@ -237,16 +239,21 @@
     const launchMk = { el: launchEl, lat: state.from.lat, lng: state.from.lng, alt: 0.002 };
     const destMk = { el: markerEl('#f43f5e', short(state.to), 'site'), lat: state.to.lat, lng: state.to.lng, alt: 0.002 };
     state.siteMarkers = [launchMk, destMk];
-    globe.ringsData([
-      { lat: state.from.lat, lng: state.from.lng, rgb: 'rgba(34,197,94' },
-      { lat: state.to.lat, lng: state.to.lng, rgb: 'rgba(244,63,94' },
-    ]);
+    state.baseRings = [
+      { lat: state.from.lat, lng: state.from.lng, rgb: 'rgba(34,197,94', a: 0.7 },
+      { lat: state.to.lat, lng: state.to.lng, rgb: 'rgba(244,63,94', a: 0.7 },
+    ];
+    state.ringKey = ''; state.runs.forEach(r => { r.arrived = false; r.endRing = null; });
     buildReadouts();
     renderRouteInfo();
     renderPresetInfo();
     syncUrl();
     lastPathDraw = 0;
     draw(true);
+  }
+  function bearing(a, b) {
+    const la1 = a.lat * Math.PI / 180, la2 = b.lat * Math.PI / 180, dl = (b.lng - a.lng) * Math.PI / 180;
+    return (Math.atan2(Math.sin(dl) * Math.cos(la2), Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dl)) * 180 / Math.PI + 360) % 360;
   }
   function short(p) { return p.id === 'custom' ? fmtCoord(p) : p.name.replace(/\s*\(.*\)$/, ''); }
   // Point at bearing (deg) and angular distance (rad) from p.
@@ -371,6 +378,11 @@
     state.runs.forEach((r, i) => {
       const st = states[i], ll = gcFn(st.s);
       Object.assign(r.marker, { lat: ll.lat, lng: ll.lng, alt: visAlt(st.h) });
+      const ph = st.phase || '';
+      r.marker.el.classList.toggle('onpad', !st.done && st.s < Math.max(20, routeKm * 0.012) && st.h < 3);
+      r.marker.el.classList.toggle('thrust', !st.done && state.t > 0 && THRUST.test(ph) && !NOTHRUST.test(ph));
+      if (st.done && !r.arrived) { r.arrived = true; const e = r.preset.kind === 'orbital' ? ll : gcFn(r.outOfRange ? r.flyKm : routeKm); r.endRing = { lat: e.lat, lng: e.lng, rgb: hexA(r.color, 1).replace(/,1\)$/, ''), r: 5, sp: 3, rep: 900 }; if (state.t > 0) hooks.onArrive(r); }
+      if (!st.done && r.arrived) { r.arrived = false; r.endRing = null; }
       paths.push(r.planned);
       // travelled portion
       const pts = [];
@@ -379,6 +391,7 @@
       for (let k = 0; k <= last; k += stride) { const q = S0[k], p = gcFn(q.s); pts.push([p.lat, p.lng, visAlt(q.h)]); }
       pts.push([ll.lat, ll.lng, visAlt(st.h)]);
       if (pts.length < 2) pts.unshift(pts[0]);
+      paths.push({ pts, color: hexA(r.color, 0.16), width: 11, dash: false }); // soft glow under the trail
       paths.push({ pts, color: r.color, width: 3.5, dash: false });
       if (r.booster) {
         const B = r.booster, b0 = B.samples[0].t;
@@ -397,17 +410,48 @@
     });
     const now = performance.now();
     if (forcePaths || now - lastPathDraw > 70) { globe.pathsData(paths); lastPathDraw = now; }
-    const mks = [...state.siteMarkers, ...(state.ringLabels || []), ...(state.baseMarkers || []), ...state.runs.map(r => r.marker)];
+    updateRings();
+    const mks = [...state.siteMarkers, ...(state.ringLabels || []), ...(state.baseMarkers || []), ...(state.fx || []), ...state.runs.map(r => r.marker)];
     state.runs.forEach(r => { if (r.stopMk) mks.push(r.stopMk); });
     state.runs.forEach(r => { if (r.booster && r.booster.marker.show) mks.push(r.booster.marker); });
     globe.htmlElementsData(mks);
-    if (state.follow && state.runs[0]) {
-      const m = state.runs[0].marker;
-      globe.pointOfView({ lat: m.lat, lng: m.lng, altitude: Math.max(0.8, globe.pointOfView().altitude) }, 0);
+    if (state.follow && state.runs[0]) { // smoothed chase camera
+      const m = state.runs[0].marker, pov = globe.pointOfView();
+      let dl = m.lng - pov.lng; dl = ((dl + 540) % 360) - 180;
+      globe.pointOfView({ lat: pov.lat + (m.lat - pov.lat) * 0.12, lng: pov.lng + dl * 0.12, altitude: pov.altitude + (Math.max(0.9, Math.min(2.2, 0.9 + visAlt(states[0].h) * 3)) - pov.altitude) * 0.05 }, 0);
     }
     updateReadouts(states);
   }
 
+  const THRUST = /boost|stage|ascent|burn|liftoff|max-q|core|S-I|rocket|scramjet|accelerate|Released/i, NOTHRUST = /separation|orbit|coast|SECO|cutoff/i;
+  const hooks = { onArrive() {}, onEnd() {}, onLaunch() {} };
+  function updateRings() {
+    const list = [...(state.baseRings || [])];
+    if (state.launchFxUntil && performance.now() < state.launchFxUntil) list.push(state.launchRing || (state.launchRing = { lat: state.from.lat, lng: state.from.lng, rgb: 'rgba(255,190,90', r: 7, sp: 5, rep: 450 }));
+    state.runs.forEach(r => { if (r.endRing) list.push(r.endRing); });
+    const key = list.map(x => x.lat.toFixed(3) + x.rgb + (x.r || 0)).join('|');
+    if (key !== state.ringKey) { state.ringKey = key; globe.ringsData(list); }
+  }
+  // ---------- Results summary ----------
+  function showResults() {
+    if (!state.runs.length) return;
+    const rows = state.runs.map(r => {
+      const p = r.preset, orb = p.kind === 'orbital';
+      const outcome = orb ? '🛰 Reached orbit' : r.outOfRange ? `✕ Stopped at max range (≈ ${fmtInt(r.shortBy)} km short)` : '✅ Reached destination';
+      const dist = orb ? routeKm : (r.outOfRange ? r.flyKm : routeKm);
+      const time = orb ? r.arrival : r.end;
+      return `<div class="res-run" style="--c:${r.color}"><div class="res-name"><i style="background:${r.color}"></i>${r.label} · ${esc(p.name)}</div>
+        <div class="res-out">${outcome}</div>
+        <div class="res-grid"><span>${orb ? 'Over destination' : 'Flight time'}</span><b>${fmtDur(time)}</b><span>Peak speed</span><b>${fmtInt(r.maxV)} km/h</b>
+        <span>Distance</span><b>${fmtInt(dist)} km</b><span>Peak altitude</span><b>${r.maxH >= 10 ? fmtInt(r.maxH) : r.maxH.toFixed(1)} km</b></div></div>`;
+    }).join('');
+    const box = $('results');
+    box.innerHTML = `<div class="res-head"><b>🏁 Flight summary</b><span class="muted small">${esc(short(state.from))} → ${esc(short(state.to))} · ${fmtInt(routeKm)} km</span><button class="res-x" aria-label="Close">✕</button></div>
+      <div class="res-runs">${rows}</div>
+      <div class="res-actions"><button class="btn small-btn" data-act="copy">🔗 Copy share link</button><button class="btn small-btn" data-act="replay">↺ Replay</button><button class="btn small-btn" data-act="random">🎲 Random scenario</button></div>`;
+    box.className = 'results'; box.hidden = false;
+  }
+  function fmtDur(sec) { sec = Math.round(sec); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s2 = sec % 60; return h ? `${h} h ${m} min` : m ? `${m} min ${s2} s` : `${s2} s`; }
   // ---------- Loop ----------
   let lastFrame = performance.now();
   const setZoomed = pov => el.classList.toggle('zoomed', (pov || globe.pointOfView()).altitude < 0.9);
@@ -419,7 +463,7 @@
     lastFrame = now;
     if (state.playing) {
       state.t += dt * state.speed;
-      if (state.t >= state.maxEnd) { state.t = state.maxEnd; setPlaying(false); }
+      if (state.t >= state.maxEnd) { state.t = state.maxEnd; setPlaying(false); draw(true); showResults(); hooks.onEnd(); }
       draw(false);
     }
     requestAnimationFrame(frame);
@@ -427,7 +471,9 @@
   function setPlaying(p) {
     if (p && state.t >= state.maxEnd) state.t = 0;
     state.playing = p;
+    if (p) $('results').hidden = true;
     $('playBtn').textContent = p ? '❚❚ Pause' : '▶ Play';
+    hooks.onPlayState && hooks.onPlayState(p);
   }
 
   // ---------- Controls ----------
@@ -743,5 +789,28 @@
   if (qs.get('autoplay') === '1') setPlaying(true);
 
   // Small hook for automated checks
-  window.__launchSim = { syncUrl, setPlatform, state, draw, setPlaying, globe, openPicker, closePicker, onPick, setPick, showCountry, setLaunchFromBase, focusLaunch, featureAt, rebuild };
+  function randomScenario() {
+    const rnd = a => a[Math.floor(Math.random() * a.length)];
+    if (S.platform === 'sub') setPlatform('land', true);
+    const sites = PLACES.filter(p => p.cc && S.availableGroups(p.cc).some(g => g.key === 'own' && g.items.some(v => !v.retired)));
+    const from = rnd(sites), own = S.availableGroups(from.cc).find(g => g.key === 'own').items.filter(v => !v.retired);
+    const a = rnd(own), allowed = S.availableGroups(from.cc).flatMap(g => g.items).filter(v => v !== a && !v.retired);
+    const b = rnd(allowed);
+    const max = isFinite(a.maxRange) ? a.maxRange : 9000;
+    const cands = PLACES.filter(p => p !== from).map(p => ({ p, d: S.greatCircleKm(from, p) })).filter(x => x.d > Math.min(150, max * 0.3) && x.d < max * 1.25);
+    const to = cands.length ? rnd(cands).p : rnd(PLACES.filter(p => p !== from));
+    state.from = from; state.to = to; state.a = a; state.b = b || state.b;
+    fillPlaceSelect($('fromSel'), state.from); fillPlaceSelect($('toSel'), state.to);
+    ensureValidVehicles(true); setDots(); state.t = 0; setPlaying(false); $('results').hidden = true; rebuild(); focusRoute(1200);
+    toast(`🎲 Random scenario: <b>${esc(a.name)}</b> vs <b>${esc(state.b.name)}</b> from ${esc(short(from))} to ${esc(short(to))}.`);
+  }
+  $('randomBtn').onclick = randomScenario;
+  $('results').onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.classList.contains('res-x')) $('results').hidden = true;
+    else if (b.dataset.act === 'copy') hooks.copyLink ? hooks.copyLink(b) : null;
+    else if (b.dataset.act === 'replay') { $('results').hidden = true; state.t = 0; draw(true); hooks.onReplay ? hooks.onReplay() : setPlaying(true); }
+    else if (b.dataset.act === 'random') { $('results').hidden = true; randomScenario(); }
+  };
+  window.__launchSim = { hooks, randomScenario, showResults, focusRoute, routeKm: () => routeKm, gcFn: k => gcFn(k), syncUrl, setPlatform, state, draw, setPlaying, globe, openPicker, closePicker, onPick, setPick, showCountry, setLaunchFromBase, focusLaunch, featureAt, rebuild };
 })();

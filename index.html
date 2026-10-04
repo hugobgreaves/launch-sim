@@ -20,6 +20,7 @@
   <header class="topbar">
     <div class="brand"><span class="logo">🚀</span><div><h1>Launch Speed Simulator</h1><p id="tagline">Compare how fast rockets, missiles and aircraft cross the globe</p></div></div>
     <nav class="mode-tabs" id="modeTabs"><button data-mode="globe" class="on">🌍 Globe</button><button data-mode="space">🪐 Space missions</button></nav>
+    <div class="top-tools"><button id="camBtn" class="tool-btn cam" title="Close-up 3D Starship view (C)">🛰 Starship cam</button><button id="soundBtn" class="tool-btn" title="Sound effects (off by default)" aria-pressed="false">🔇 Sound</button><button id="helpBtn" class="tool-btn" title="Quick guide">❔ Guide</button></div>
   </header>
 
   <section id="readouts" class="readouts" aria-live="polite"></section>
@@ -29,7 +30,7 @@
     <button id="panelToggle" class="panel-toggle" aria-label="Toggle controls"><span></span></button>
     <div class="panel-body">
       <div class="card globe-only">
-        <div class="card-title">Route</div>
+        <div class="card-title">Route <button id="randomBtn" class="title-btn" type="button" title="Pick a random launch site, vehicles and destination">🎲 Random scenario</button></div>
         <div class="pick-row">
           <span class="muted">Launch platform:</span>
           <div class="seg" id="platSeg">
@@ -149,7 +150,16 @@
   <div id="vpopBackdrop" class="vpop-backdrop" hidden></div>
 
   <div id="toast" class="toast" hidden></div>
-  <div id="loading" class="loading">Loading globe…</div>
+  <div id="launchBar" class="launch-bar">
+    <button id="launchBtn" class="launch-btn">🚀 LAUNCH</button>
+    <button id="lbReset" class="lb-small" title="Reset (R)">↺</button>
+    <label class="lb-check" title="Camera flies to the launch, then follows the route and the arrival"><input type="checkbox" id="cinematic" checked /> 🎬 Cinematic camera</label>
+  </div>
+  <div id="countdown" class="countdown" hidden><div class="cd-label">T-minus</div><div class="cd-num" id="cdNum">5</div><div class="cd-sub" id="cdSub"></div><button id="cdSkip" class="btn small-btn">Skip ▶▶ <kbd>Esc</kbd></button></div>
+  <div id="results" class="results" hidden></div>
+  <div id="guide" class="guide" hidden></div>
+  <div id="stars" class="stars"></div>
+  <div id="loading" class="loading"><div class="ld-logo">🚀</div><div class="ld-title">Launch Speed Simulator</div><div class="ld-bar"><i></i></div><div class="ld-sub">Loading globe, textures &amp; country outlines…</div></div>
 
   <script>window.__initialSearch = location.search;</script>
   <script src="vendor/globe.gl.min.js"></script>
@@ -157,8 +167,7 @@
   <script src="catalog.js"></script>
   <script src="bases.js"></script>
   <script src="app.js"></script>
-  <script src="vendor/astronomy.browser.min.js"></script>
-  <script src="space-core.js"></script>
-  <script src="space.js"></script>
+  <script src="polish.js"></script>
+  <!-- Space mode (astronomy-engine, space-core.js, space.js) is lazy-loaded by polish.js on first use -->
 </body>
 </html>

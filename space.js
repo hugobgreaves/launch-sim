@@ -93,10 +93,18 @@
   function select(tr, label) {
     S.sel = { tr, label };
     S.mission = addRefuel(S.target === 'mars' ? C.marsMission(tr) : C.moonMission(tr), C.refuelPlan(S.target, tr));
-    S.t = S.mission.start; setPlaying(false); S.view.fitted = false; S.orbits = null; S.follow = false;
+    S.t = S.mission.start; setPlaying(false); hideSpaceResults(); S.view.fitted = false; S.orbits = null; S.follow = false;
     $('spDate').value = tr.dep.toISOString().slice(0, 16);
     renderWindows(); renderSummary(); renderPhases(); syncUrl();
     const r = ratingFor(tr); $('spRating').className = 'sp-rating ' + r.cls; $('spRating').innerHTML = r.text;
+  }
+  // "Live": tankers start launching now, so the injection burn happens after the refuelling campaign.
+  function planLive() {
+    const now = new Date(), best = d => (S.target === 'mars' ? C.bestForDate(d) : C.bestMoon(d));
+    const plan = C.refuelPlan(S.target, best(now));
+    const dep = new Date(Math.ceil((now.getTime() + plan.campaign * 1000) / 60000) * 60000);
+    const tr = best(dep);
+    if (tr) select(tr, `Live: tankers start launching now → earliest departure after ≈ ${Math.round(plan.campaign / DAY)} days of refuelling`);
   }
   function planCustom(date) {
     if (!(date instanceof Date) || isNaN(date)) return;
@@ -351,6 +359,25 @@
     }
   }
 
+  function showSpaceResults() {
+    const m = S.mission, tr = m.tr, plan = m.plan, box = $('results'), land = m.phases[m.phases.length - 1];
+    const rows = S.target === 'mars'
+      ? [['Trans-Mars injection', dShort(tr.dep)], ['Landed on Mars', dShort(new Date(m.t0 + land.t * 1000))], ['Transit', `${Math.round(tr.tof)} days`], ['Δv from LEO / entry speed', `${tr.dvLEO.toFixed(2)} / ${tr.vEntry.toFixed(2)} km/s`]]
+      : [['Trans-lunar injection', dShort(tr.dep)], ['Landed on the Moon', dShort(new Date(m.t0 + land.t * 1000))], ['Coast', `${tr.tof.toFixed(1)} days`], ['TLI / LOI Δv', `${tr.dvTLI.toFixed(2)} / ${tr.dvLOI.toFixed(2)} km/s`]];
+    if (plan && plan.n) rows.push(['Refuelling (estimate)', `${plan.n} tanker flights, ≈ ${fmt(plan.prop)} t`]);
+    rows.push(['Total mission time', met(m.end - m.start).replace('T+', '')]);
+    box.className = 'results space';
+    box.innerHTML = `<div class="res-head"><b>🏁 Mission complete – Starship landed on ${S.target === 'mars' ? 'Mars' : 'the Moon'}</b><button class="res-x" aria-label="Close">✕</button></div>
+      <div class="res-runs"><div class="res-run" style="--c:#38bdf8"><div class="res-grid">${rows.map(r => `<span>${r[0]}</span><b>${r[1]}</b>`).join('')}</div></div></div>
+      <div class="res-actions"><button class="btn small-btn" data-sact="copy">🔗 Copy share link</button><button class="btn small-btn" data-sact="replay">↺ Replay</button></div>`;
+    box.hidden = false;
+  }
+  $('results').addEventListener('click', e => {
+    const box = $('results'), b = e.target.closest('button'); if (!b || !box.classList.contains('space')) return;
+    if (b.classList.contains('res-x')) box.hidden = true;
+    else if (b.dataset.sact === 'copy') window.__launchSim.copyLink && window.__launchSim.copyLink(b);
+    else if (b.dataset.sact === 'replay') { box.hidden = true; S.t = S.mission.start; setPlaying(true); }
+  });
   function smooth01(x) { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); }
   // ================= playback =================
   function capFor(ph) {
@@ -378,7 +405,7 @@
       if ($('spAutoSlow').checked) rate = Math.min(rate, capFor(ph));
       let nt = S.t + dt * rate;
       if ($('spAutoSlow').checked) { const nx = m.phases.find(p => p.t > S.t + 1e-6); if (nx && nt > nx.t && capFor(nx) < rate) nt = nx.t; }
-      S.t = Math.min(nt, m.end); if (S.t >= m.end) setPlaying(false);
+      S.t = Math.min(nt, m.end); if (S.t >= m.end) { setPlaying(false); showSpaceResults(); }
     }
     const st = m.at(S.t);
     draw(st);
@@ -406,7 +433,7 @@
     setTimeout(() => {
       if (keep) return;
       if (t === 'mars') { const o = marsWindows()[0]; select(o.fast || o.eco, `${o.year} window · ${o.fast ? 'Fast (Type I)' : 'Min-energy (Type II)'}`); }
-      else select(C.bestMoon(new Date()), 'Live: departing now');
+      else planLive();
     }, 30);
   }
   $('spWindows').onclick = e => {
@@ -415,7 +442,7 @@
     else { const o = marsWindows()[+b.dataset.i], w = o[b.dataset.k]; select(w, `${o.year} window · ${b.dataset.k === 'fast' ? 'Fast (Type I)' : 'Min-energy (Type II)'}`); }
   };
   const nowLocalInput = () => new Date().toISOString().slice(0, 16);
-  $('spNow').onclick = () => { $('spDate').value = nowLocalInput(); planCustom(new Date()); S.sel.label = 'Live: departing now'; renderSummary(); };
+  $('spNow').onclick = () => planLive();
   $('spPlan').onclick = () => planCustom(new Date($('spDate').value + 'Z'));
   $('spDate').onkeydown = e => { if (e.key === 'Enter') $('spPlan').click(); };
   $('spPlay').onclick = () => setPlaying(!S.playing);
@@ -435,7 +462,9 @@
 
   // ================= mode switching =================
   const TAG_GLOBE = $('tagline').textContent;
+  function hideSpaceResults() { const b = $('results'); if (b.classList.contains('space')) { b.hidden = true; b.className = 'results'; } }
   function setMode(mode) {
+    hideSpaceResults();
     const space = mode === 'space'; S.active = space;
     document.body.classList.toggle('space-mode', space);
     $('space').hidden = !space; $('spaceReadouts').hidden = !space;

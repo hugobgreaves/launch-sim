@@ -27,3 +27,14 @@ Toggle **🪐 Space missions** in the top bar (or open `?mode=space&target=mars|
 - `space.js` – heliocentric (Mars) / geocentric (Moon) canvas views, close-up insets, playback, windows UI, share URL (`dep`, `tof`).
 - Validated at dev time against NASA JPL Horizons (positions) and NASA/TM-2010-216764 (Mars window C3/dates).
 - Simplifications: patched conics, no planetary gravity during transfer, no DSMs; refuelling, EDL and lunar descent are labelled estimates.
+
+## v6 polish ("v3" release)
+
+- **Earth:** Blue Marble day texture, city lights on the night side, and a live day/night terminator from the current UTC sun position. Also a starfield, glowing trails, a launch burst and arrival pulses.
+- **Launch:** a big LAUNCH button (`L`) with a skippable T-minus countdown, a cinematic fly-to camera and a liftoff plume. Optional WebAudio sound effects are off by default.
+- **UX:** first-time guide (❔ Guide), collapsible sidebar sections, loading screen, Random scenario, and a results card with Copy share link. Space mode is lazy-loaded.
+- **🛰 Starship cam (`C`):** a procedural three.js Super Heavy + Starship you can orbit and zoom. It's synced to the simulation's time, phase, altitude and speed.
+  - **Pad and launch:** Starbase pad (tower with chopsticks), Raptor plumes with Mach diamonds, liftoff steam, and the plume expanding as the air thins.
+  - **Climb and staging:** the sky darkens to space over the curved Earth. Hot staging, then the booster flips back, boosts back and is caught by the chopsticks.
+  - **Space missions:** the ship's vacuum Raptors glow, and you see orbital refuelling with a tanker, Mars entry plasma and landings on Mars and the Moon.
+  - **Loading and performance:** three.js is bundled in `vendor/three-bundle.min.js` and only loads when the cam is opened. Resolution adapts to keep the frame rate up.
